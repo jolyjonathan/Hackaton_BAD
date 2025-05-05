@@ -1,0 +1,79 @@
+- name: Installer les dépendances pour le dépôt Docker
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - software-properties-common
+    state: present
+    update_cache: yes
+  become: yes
+  tags:
+    - docker
+
+- name: Ajouter la clé GPG officielle de Docker
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+  become: yes
+  tags:
+    - docker
+
+- name: Ajouter le dépôt Docker
+  apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+  become: yes
+  tags:
+    - docker
+
+- name: Installer Docker Engine
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: latest
+    update_cache: yes
+  become: yes
+  tags:
+    - docker
+
+- name: Démarrer et activer le service Docker
+  service:
+    name: docker
+    state: started
+    enabled: yes
+  become: yes
+  tags:
+    - docker
+
+- name: Installer python3-pip
+  apt:
+    name: python3-pip
+    state: present
+    update_cache: yes
+  become: yes
+  tags:
+    - docker
+
+- name: Installer le module Docker SDK pour Python
+  pip:
+    name: docker
+    executable: pip3
+  become: yes
+  tags:
+    - docker
+
+- name: Build Docker image Greenshop web
+  docker_image:
+    name: greenshop-web
+    tag: latest
+    source: build
+    build:
+      path: "{{ playbook_dir }}"                                         # dossier racine du repo
+      dockerfile: "{{ playbook_dir }}/roles/docker/webapp/Dockerfile"    # chemin absolu vers le Dockerfile
+      pull: yes
+  tags:
+    - docker
+

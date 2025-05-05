@@ -1,0 +1,15 @@
+- name: Dump de la base MariaDB existante
+  command: >
+    mysqldump -u {{ db_user }} -p{{ db_pass }} {{ db_name }}
+  register: sql_dump
+  become: yes
+  tags:
+    - dump_db
+
+- name: Écrire le dump dans un fichier
+  copy:
+    content: "{{ sql_dump.stdout }}"
+    dest: "{{ playbook_dir }}/roles/db/files/db_dump.sql"
+  become: yes
+  tags:
+    - dump_db
