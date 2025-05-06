@@ -1,0 +1,41 @@
+# roles/deploy/tasks/main.yml
+---
+
+- name: Exporter l’image Docker en archive tar.gz (sur le controleur)
+  delegate_to: localhost
+  become: false
+  shell: |
+    docker save greenshop-web:latest | gzip > /tmp/greenshop-web.tar.gz
+  args:
+    creates: /tmp/greenshop-web.tar.gz
+  tags:
+    - deploy
+
+- name: Copier l’archive Docker sur le serveur web
+  copy:
+    src: /tmp/greenshop-web.tar.gz
+    dest: /tmp/greenshop-web.tar.gz
+    mode: '0644'
+  tags:
+    - deploy
+
+- name: Charger l’image Docker depuis l’archive
+  become: yes
+  shell: |
+    gunzip -c /tmp/greenshop-web.tar.gz | docker load
+  args:
+    warn: false
+  tags:
+    - deploy
+
+- name: Demarrer le container Greenshop-web
+  become: yes
+  docker_container:
+    name: greenshop-web
+    image: greenshop-web:latest
+    state: started
+    restart_policy: always
+    ports:
+      - "80:80"
+  tags:
+    - deploy
