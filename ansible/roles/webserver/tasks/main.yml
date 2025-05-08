@@ -1,0 +1,70 @@
+- name: Synchroniser les sources du site Greenshop
+  ansible.posix.synchronize:
+    src: /var/www/greenshop/
+    dest: "{{ playbook_dir }}/../roles/webserver/files/"
+    mode: pull
+    recursive: yes
+    rsync_opts:
+      - "--archive"
+      - "--delete"
+  delegate_to: localhost
+  when: inventory_hostname == '192.168.50.82'
+  tags:
+    - sync_web
+
+
+
+
+- name: Installer Apache et PHP8 sur Amazon Linux 2
+  become: yes
+  shell: |
+    amazon-linux-extras enable php8.0
+    yum clean metadata
+    amazon-linux-extras install -y php8.0
+    yum install -y httpd php-mysqlnd php-zip
+  args:
+    creates: /usr/bin/php
+
+- name: Démarrer et activer le service Apache
+  become: yes
+  service:
+    name: httpd
+    state: started
+    enabled: yes
+
+- name: Créer le répertoire de l'application
+  become: yes
+  file:
+    path: /var/www/greenshop
+    state: directory
+    owner: apache
+    group: apache
+    mode: '0755'
+
+- name: Synchroniser les fichiers web dans /home/ec2-user/tmp_upload
+  delegate_to: localhost
+  ansible.posix.synchronize:
+    src: "{{ role_path }}/files/"
+    dest: /home/ec2-user/tmp_upload/
+    mode: push
+    recursive: yes
+
+- name: Installer dans /var/www sur la cible
+  ansible.builtin.shell: |
+    set -e
+    sudo rm -rf /var/www/greenshop
+    sudo mkdir -p /var/www/greenshop/
+    sudo mv /home/ec2-user/tmp_upload/* /var/www/greenshop/
+    sudo rmdir /home/ec2-user/tmp_upload
+    ls -l /var/www
+    args:
+      executable: /bin/bash
+    become: yes   # facultatif si sudo passwordless pour ec2-user
+    tags:
+      - webserver
+
+- name: Redémarrer Apache pour prendre en compte les changements
+  become: yes
+  service:
+    name: httpd
+    state: restarted

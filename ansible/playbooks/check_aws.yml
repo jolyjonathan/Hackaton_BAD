@@ -1,0 +1,30 @@
+# playbooks/check_aws.yml
+- name: Vérifier la CLI AWS sur le serveur Ansible
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Vérifier que la CLI AWS est installée
+      ansible.builtin.command: aws --version
+      register: aws_cli_check
+      changed_when: false
+      failed_when: aws_cli_check.rc != 0
+      tags:
+        - aws_check
+
+    - name: Vérifier la validité des credentials AWS
+      ansible.builtin.command: >
+        aws sts get-caller-identity --output json
+      register: aws_identity
+      changed_when: false
+      failed_when: aws_identity.rc != 0
+      tags:
+        - aws_check
+
+    - name: Afficher l’ARN de l’utilisateur AWS configuré
+      ansible.builtin.debug:
+        msg: "AWS configuré pour l’ARN {{ (aws_identity.stdout | from_json).Arn }}"
+      when: aws_identity is succeeded
+      tags:
+        - aws_check

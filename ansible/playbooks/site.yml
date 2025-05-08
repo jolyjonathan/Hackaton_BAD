@@ -1,0 +1,10 @@
+- name: Provision de tous les serveurs
+  hosts: all
+  become: yes
+
+  roles:
+    - common
+    - { role: geerlingguy.apache, when: "'web' in group_names" }
+    - { role: geerlingguy.mysql,   when: "'db'  in group_names" }
+    - role: webserver
+    - role: dbserver
