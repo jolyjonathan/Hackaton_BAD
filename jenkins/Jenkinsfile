@@ -1,0 +1,70 @@
+pipeline {
+  agent any
+
+  environment {
+    IMAGE = 'flemoi/greenshop'
+    TAG = 'latest'
+    DOCKER_CREDS = 'dockerhub-credentials-id'
+    DOCKERFILE_PATH = 'ansible_old/roles/docker/webapp/Dockerfile'
+  }
+
+  stages {
+    stage('Clone ansible branch') {
+      steps {
+        git branch: 'ansible', url: 'https://github.com/jolyjonathan/Hackaton_BAD.git'
+      }
+    }
+
+    stage('Check if Docker build is needed') {
+      steps {
+        script {
+          // Vérifie les fichiers modifiés entre les deux derniers commits
+          def changes = sh(script: "git diff --name-only HEAD~1 HEAD", returnStdout: true).trim()
+          echo "Fichiers modifiés :\n${changes}"
+
+          // Vérifie s’il y a un Dockerfile ou fichier dans files/
+          if (changes =~ /Dockerfile/ || changes =~ /files\//) {
+            currentBuild.description = "Build déclenché par une modif Dockerfile/files"
+            env.BUILD_DOCKER = "true"
+          } else {
+            currentBuild.description = "Aucune modif pertinente, build ignoré"
+            env.BUILD_DOCKER = "false"
+          }
+        }
+      }
+    }
+
+    stage('Build Docker image') {
+      when {
+        expression { return env.BUILD_DOCKER == "true" }
+      }
+      steps {
+        script {
+          def commit = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+          def dateTag = sh(script: 'date +%Y%m%d-%H%M', returnStdout: true).trim()
+          def imageTag = "${IMAGE}:${dateTag}-${commit}"
+          env.IMAGE_TAG = imageTag
+
+          sh "docker build -t ${imageTag} -t ${IMAGE}:${TAG} -f ${DOCKERFILE_PATH} ."
+        }
+      }
+    }
+
+    stage('Push to DockerHub') {
+      when {
+        expression { return env.BUILD_DOCKER == "true" }
+      }
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: "${DOCKER_CREDS}",
+          usernameVariable: 'DOCKER_USER',
+          passwordVariable: 'DOCKER_PASS'
+        )]) {
+          sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
+          sh "docker push ${IMAGE_TAG}"
+          sh "docker push ${IMAGE}:${TAG}"
+        }
+      }
+    }
+  }
+}
