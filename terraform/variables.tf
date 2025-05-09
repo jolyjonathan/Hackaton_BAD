@@ -73,7 +73,7 @@ variable "asg_max_size" {
 variable "asg_desired_capacity" {
   description = "The desired capacity of the auto scaling group"
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "db_allocated_storage" {
