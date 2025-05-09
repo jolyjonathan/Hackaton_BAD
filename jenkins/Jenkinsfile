@@ -6,7 +6,7 @@ pipeline {
     TAG = 'latest'
     DOCKER_CREDS = 'dockerhub-credentials-id'
     DOCKERFILE_PATH = 'ansible_old/roles/docker/webapp/Dockerfile'
-    BUILD_CONTEXT = '.'
+    DOCKER_BUILDKIT = '1' // Active BuildKit
   }
 
   stages {
@@ -19,14 +19,16 @@ pipeline {
     stage('Build Docker image') {
       steps {
         script {
-          // Générer un tag versionné
           def commit = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
           def dateTag = sh(script: 'date +%Y%m%d-%H%M', returnStdout: true).trim()
           def imageTag = "${IMAGE}:${dateTag}-${commit}"
           env.IMAGE_TAG = imageTag
 
-          // Build de l’image avec le tag versionné
-          sh "docker build -t ${imageTag} -t ${IMAGE}:${TAG} -f ${DOCKERFILE_PATH} ${BUILD_CONTEXT}"
+          // Construction avec buildx et double tag
+          sh """
+            docker buildx create --use || true
+            docker buildx build --tag ${imageTag} --tag ${IMAGE}:${TAG} -f ${DOCKERFILE_PATH} . --load
+          """
         }
       }
     }
