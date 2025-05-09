@@ -61,7 +61,7 @@ variable "app_instance_type" {
 variable "asg_min_size" {
   description = "The minimum size of the auto scaling group"
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "asg_max_size" {
@@ -73,7 +73,7 @@ variable "asg_max_size" {
 variable "asg_desired_capacity" {
   description = "The desired capacity of the auto scaling group"
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "db_allocated_storage" {
