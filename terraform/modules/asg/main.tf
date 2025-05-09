@@ -43,12 +43,19 @@ resource "aws_autoscaling_group" "app" {
   max_size            = var.max_size
   desired_capacity    = var.desired_capacity
   vpc_zone_identifier = var.private_subnet_ids
-  target_group_arns   = var.target_group_arns
+  
+  # Retirer target_group_arns d'ici, nous allons le gérer différemment
   
   launch_template {
     id      = aws_launch_template.app.id
     version = "$Latest"
   }
+  
+  # Ajouter cette section pour lier explicitement au target group
+  target_group_arns = var.target_group_arns
+  
+  health_check_type         = "ELB"  # Utiliser les health checks du load balancer
+  health_check_grace_period = 300
   
   tag {
     key                 = "Name"
