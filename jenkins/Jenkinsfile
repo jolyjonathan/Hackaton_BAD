@@ -1,24 +1,39 @@
 pipeline {
   agent any
 
+  environment {
+    IMAGE = 'flemoi/greenshop'
+    TAG = 'latest'
+    DOCKER_CREDS = 'dockerhub-credentials-id'
+    DOCKERFILE_PATH = 'ansible_old/roles/docker/webapp/Dockerfile'
+    BUILD_CONTEXT = 'ansible_old/roles/docker/webapp'
+  }
+
   stages {
-    stage('Checkout') {
+    stage('Cloner la branche ansible') {
       steps {
-        echo '📥 Clonage du dépôt...'
-        checkout scm
+        git branch: 'ansible', url: 'https://github.com/jolyjonathan/Hackaton_BAD.git'
       }
     }
 
-    stage('Build') {
+    stage('Build Docker image') {
       steps {
-        echo '🔨 Étape de build simulée'
-        sh 'echo "Hello from Jenkins!"'
+        script {
+          docker.build("${IMAGE}:${TAG}", "-f ${DOCKERFILE_PATH} ${BUILD_CONTEXT}")
+        }
       }
     }
 
-    stage('Done') {
+    stage('Push to DockerHub') {
       steps {
-        echo '✅ Pipeline terminé avec succès.'
+        withCredentials([usernamePassword(
+          credentialsId: "${DOCKER_CREDS}",
+          usernameVariable: 'DOCKER_USER',
+          passwordVariable: 'DOCKER_PASS'
+        )]) {
+          sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
+          sh "docker push ${IMAGE}:${TAG}"
+        }
       }
     }
   }
