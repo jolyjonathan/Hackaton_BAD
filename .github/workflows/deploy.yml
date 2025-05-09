@@ -1,11 +1,48 @@
-name: Deploy GreenShop via Bastion
+name: Debug and Deploy GreenShop
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
+
 jobs:
+  ssh-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install SSH debug tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssh-client netcat-openbsd traceroute dnsutils
+      
+      - name: Set up SSH key for testing
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          echo "Host *" > ~/.ssh/config
+          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "  UserKnownHostsFile=/dev/null" >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
+      
+      - name: Debug bastion connectivity
+        run: |
+          echo "======== INFORMATIONS RÉSEAU ========"
+          echo "Adresse IP publique du runner GitHub:"
+          curl -s ifconfig.me
+          
+          echo -e "\n======== RÉSOLUTION DNS ========"
+          echo "Résolution DNS du bastion:"
+          nslookup ${{ secrets.BASTION_HOST }} || echo "Résolution DNS échouée"
+          
+          echo -e "\n======== TEST DE CONNEXION ========"
+          echo "Test de connexion au bastion (port 22):"
+          nc -zv -w 10 ${{ secrets.BASTION_HOST }} 22 || echo "Connexion au port 22 échouée"
+          
+          echo -e "\n======== TENTATIVE SSH DIRECTE ========"
+          echo "Tentative de connexion SSH directe au bastion:"
+          ssh -v -i ~/.ssh/id_rsa -o ConnectTimeout=10 ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} "echo Connexion SSH réussie" || echo "Connexion SSH échouée"
+          
   deploy:
     runs-on: ubuntu-latest
     steps:
