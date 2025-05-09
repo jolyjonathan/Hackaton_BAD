@@ -1,9 +1,7 @@
 ---
 # deploy.yml
-- name: Déployer l'app Greenshop sur les serveurs web
+- name: Déploiement du site Greenshop
   hosts: web
   become: yes
-
   roles:
     - webserver
-

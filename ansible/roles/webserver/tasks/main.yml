@@ -63,6 +63,39 @@
     tags:
       - webserver
 
+
+- name: Ajouter le VirtualHost pour greenshop
+  ansible.builtin.blockinfile:
+    path: /etc/apache2/sites-available/greenshop.conf
+    create: yes
+    block: |
+      <VirtualHost *:80>
+          ServerName greenshop.local
+          ServerAlias greenshop.com greenshop.fr
+          ServerAdmin webmaster@localhost
+
+          DocumentRoot /var/www/greenshop
+
+          <Directory /var/www/greenshop>
+              Options Indexes FollowSymLinks
+              AllowOverride All
+              Require all granted
+          </Directory>
+
+          ErrorLog ${APACHE_LOG_DIR}/greenshop_error.log
+          CustomLog ${APACHE_LOG_DIR}/greenshop_access.log combined
+      </VirtualHost>
+  notify: Reload Apache
+
+- name: Activer le site greenshop
+  ansible.builtin.command: a2ensite greenshop.conf
+  args:
+    creates: /etc/apache2/sites-enabled/greenshop.conf
+  notify: Reload Apache
+
+
+
+
 - name: Redémarrer Apache pour prendre en compte les changements
   become: yes
   service:
