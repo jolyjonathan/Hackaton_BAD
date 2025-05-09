@@ -5,7 +5,7 @@ pipeline {
     IMAGE = 'flemoi/greenshop'
     TAG = 'latest'
     DOCKER_CREDS = 'dockerhub-credentials-id'
-    DOCKERFILE_PATH = 'ansible_old/roles/docker/webapp/Dockerfile'
+    DOCKERFILE_PATH = 'ansible/roles/docker/webapp/Dockerfile'
   }
 
   stages {
