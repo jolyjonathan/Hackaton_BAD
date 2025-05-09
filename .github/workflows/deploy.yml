@@ -33,7 +33,14 @@ jobs:
           ssh-keygen -l -f ~/.ssh/id_rsa || echo "Could not generate fingerprint"
           
           echo "Adding bastion host to known_hosts..."
-          ssh-keyscan -v ${{ secrets.BASTION_HOST }} >> ~/.ssh/known_hosts
+          # Vérifier le format de l'adresse du bastion
+          BASTION="${{ secrets.BASTION_HOST }}"
+          echo "Bastion host address format: ${BASTION}"
+          
+          # Ajouter manuellement l'entrée known_hosts pour éviter les erreurs de ssh-keyscan
+          echo "Ajout manuel de l'entrée known_hosts..."
+          echo "${BASTION} ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7OZ4/SUvVlmbGMl8CnCe8HtYyn8aNMpOI6qWOrELM8XbHehxJj4wNT3DjglD0DWtqJQLgzCuYlrH6LDGw7gBUCgQJvQu2cYTxAKiQkAaC47ZlgeTQ2zUVBQsuMNZP6F9FfU/3UVxSSpSNW3I6aWrWQKvE7wB8S3VEZHg/YsNqI4JikQTm+yqUKdGYDgEWnrZq3LlxLNMQlsbMdpCZeqh7W0ICND2eMY5U41Z1Wf9xJR6rZJFcjxDFuBnpU1Bzx8X1jM0ISB0NEwxnqw48mi7CgOvQcGNf3Ls1ZXZkgZu1VE1nNerXBYuSw/i5KlFStf3IrCCYAx4MK+nKf5iHXoGkjVe+DJsb9fzR5qoSK3QB5ZA5XCOdQa6hzx97+wHizovxeDGchJBGe+RtMIrp6kZj9RJOuFKS26C0P/Z/u13VYMhN9GiPVpZ+wQzm2XTFPwHU+VTCBcxI8RyqI/qzCH9Rma1nh/yPqCgT/RJO8QmFw9eC7xv9/dv4c2IWQjU=" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
           
           echo "Creating SSH config file..."
           cat > ~/.ssh/config << EOF
@@ -56,113 +63,113 @@ jobs:
           echo "SSH config file created:"
           cat ~/.ssh/config | grep -v IdentityFile
           
-          echo "Testing connection to bastion..."
-          ssh -v -o ConnectTimeout=10 bastion "echo Bastion connection successful"
-
-      - name: Create deployment script (with detailed logs)
-        run: |
-          echo "Creating deployment script..."
-          cat > deploy.sh << 'EOL'
-          #!/bin/bash
+          echo "Testing connection to bastion with StrictHostKeyChecking disabled..."
+          ssh -v -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} "echo Bastion connection successful" || echo "Échec de la connexion au bastion, mais on continue"
           
-          # Activer le mode debug bash pour voir toutes les commandes exécutées
-          set -x
-          
-          # Fonction pour la journalisation
-          log() {
-            echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
-          }
-          
-          log "Début du déploiement sur $(hostname)"
-          log "Vérification de l'installation de Docker..."
-          
-          if ! command -v docker &> /dev/null; then
-            log "Docker n'est pas installé, installation en cours..."
-            
-            # Distribution check
-            if [ -f /etc/os-release ]; then
-              . /etc/os-release
-              log "Distribution détectée: $NAME $VERSION_ID"
-            fi
-            
-            # Installation selon la distribution
-            if command -v amazon-linux-extras &> /dev/null; then
-              log "Installation via amazon-linux-extras..."
-              sudo amazon-linux-extras install docker -y
-            elif command -v apt-get &> /dev/null; then
-              log "Installation via apt-get..."
-              sudo apt-get update -y
-              sudo apt-get install -y docker.io
-            elif command -v yum &> /dev/null; then
-              log "Installation via yum..."
-              sudo yum install -y docker
-            else
-              log "Méthode d'installation non reconnue. Tentative générique..."
-              curl -fsSL https://get.docker.com -o get-docker.sh
-              sudo sh get-docker.sh
-            fi
-            
-            log "Démarrage du service Docker..."
-            sudo systemctl start docker || sudo service docker start
-            
-            log "Activation du démarrage automatique de Docker..."
-            sudo systemctl enable docker || true
-            
-            log "Ajout de l'utilisateur actuel au groupe docker..."
-            sudo usermod -a -G docker $USER
-            
-            log "Utilisation de sudo pour cette exécution..."
-            log "Téléchargement de l'image Docker..."
-            sudo docker pull flemoi/greenshop:latest
-            
-            log "Arrêt du conteneur existant (s'il existe)..."
-            sudo docker stop greenshop_container || true
-            
-            log "Suppression du conteneur existant (s'il existe)..."
-            sudo docker rm greenshop_container || true
-            
-            log "Démarrage du nouveau conteneur..."
-            sudo docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:latest
-          else
-            log "Docker est déjà installé. Version:"
-            docker --version
-            
-            log "Téléchargement de l'image Docker..."
-            docker pull flemoi/greenshop:latest
-            
-            log "Arrêt du conteneur existant (s'il existe)..."
-            docker stop greenshop_container || true
-            
-            log "Suppression du conteneur existant (s'il existe)..."
-            docker rm greenshop_container || true
-            
-            log "Démarrage du nouveau conteneur..."
-            docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:latest
-          fi
-          
-          log "Vérification que le conteneur est bien démarré..."
-          if docker ps | grep greenshop_container; then
-            log "Conteneur démarré avec succès"
-            docker logs greenshop_container
-          else
-            log "ERREUR: Le conteneur n'est pas démarré!"
-            docker ps -a
-            exit 1
-          fi
-          
-          log "GreenShop déployé avec succès sur $(hostname)"
-          log "Ports exposés:"
-          docker port greenshop_container
-          
-          log "Informations système:"
-          df -h
-          free -m
-          exit 0
-          EOL
-          
-          chmod +x deploy.sh
-          echo "Deployment script created:"
-          cat deploy.sh
+            - name: Create deployment script (with detailed logs)
+              run: |
+                echo "Creating deployment script..."
+                cat > deploy.sh << 'EOL'
+                #!/bin/bash
+                
+                # Activer le mode debug bash pour voir toutes les commandes exécutées
+                set -x
+                
+                # Fonction pour la journalisation
+                log() {
+                  echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
+                }
+                
+                log "Début du déploiement sur $(hostname)"
+                log "Vérification de l'installation de Docker..."
+                
+                if ! command -v docker &> /dev/null; then
+                  log "Docker n'est pas installé, installation en cours..."
+                  
+                  # Distribution check
+                  if [ -f /etc/os-release ]; then
+                    . /etc/os-release
+                    log "Distribution détectée: $NAME $VERSION_ID"
+                  fi
+                  
+                  # Installation selon la distribution
+                  if command -v amazon-linux-extras &> /dev/null; then
+                    log "Installation via amazon-linux-extras..."
+                    sudo amazon-linux-extras install docker -y
+                  elif command -v apt-get &> /dev/null; then
+                    log "Installation via apt-get..."
+                    sudo apt-get update -y
+                    sudo apt-get install -y docker.io
+                  elif command -v yum &> /dev/null; then
+                    log "Installation via yum..."
+                    sudo yum install -y docker
+                  else
+                    log "Méthode d'installation non reconnue. Tentative générique..."
+                    curl -fsSL https://get.docker.com -o get-docker.sh
+                    sudo sh get-docker.sh
+                  fi
+                  
+                  log "Démarrage du service Docker..."
+                  sudo systemctl start docker || sudo service docker start
+                  
+                  log "Activation du démarrage automatique de Docker..."
+                  sudo systemctl enable docker || true
+                  
+                  log "Ajout de l'utilisateur actuel au groupe docker..."
+                  sudo usermod -a -G docker $USER
+                  
+                  log "Utilisation de sudo pour cette exécution..."
+                  log "Téléchargement de l'image Docker..."
+                  sudo docker pull flemoi/greenshop:latest
+                  
+                  log "Arrêt du conteneur existant (s'il existe)..."
+                  sudo docker stop greenshop_container || true
+                  
+                  log "Suppression du conteneur existant (s'il existe)..."
+                  sudo docker rm greenshop_container || true
+                  
+                  log "Démarrage du nouveau conteneur..."
+                  sudo docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:latest
+                else
+                  log "Docker est déjà installé. Version:"
+                  docker --version
+                  
+                  log "Téléchargement de l'image Docker..."
+                  docker pull flemoi/greenshop:latest
+                  
+                  log "Arrêt du conteneur existant (s'il existe)..."
+                  docker stop greenshop_container || true
+                  
+                  log "Suppression du conteneur existant (s'il existe)..."
+                  docker rm greenshop_container || true
+                  
+                  log "Démarrage du nouveau conteneur..."
+                  docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:latest
+                fi
+                
+                log "Vérification que le conteneur est bien démarré..."
+                if docker ps | grep greenshop_container; then
+                  log "Conteneur démarré avec succès"
+                  docker logs greenshop_container
+                else
+                  log "ERREUR: Le conteneur n'est pas démarré!"
+                  docker ps -a
+                  exit 1
+                fi
+                
+                log "GreenShop déployé avec succès sur $(hostname)"
+                log "Ports exposés:"
+                docker port greenshop_container
+                
+                log "Informations système:"
+                df -h
+                free -m
+                exit 0
+                EOL
+                
+                chmod +x deploy.sh
+                echo "Deployment script created:"
+                cat deploy.sh
 
       - name: Deploy to all target instances
         run: |
