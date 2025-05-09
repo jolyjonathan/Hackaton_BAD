@@ -19,7 +19,14 @@ pipeline {
     stage('Build Docker image') {
       steps {
         script {
-          sh "docker build -t ${IMAGE_TAG} -f ${DOCKERFILE_PATH} ${BUILD_CONTEXT}"
+          // Générer un tag versionné
+          def commit = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+          def dateTag = sh(script: 'date +%Y%m%d-%H%M', returnStdout: true).trim()
+          def imageTag = "${IMAGE}:${dateTag}-${commit}"
+          env.IMAGE_TAG = imageTag
+
+          // Build de l’image avec le tag versionné
+          sh "docker build -t ${imageTag} -t ${IMAGE}:${TAG} -f ${DOCKERFILE_PATH} ${BUILD_CONTEXT}"
         }
       }
     }
@@ -32,6 +39,7 @@ pipeline {
           passwordVariable: 'DOCKER_PASS'
         )]) {
           sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
+          sh "docker push ${IMAGE_TAG}"
           sh "docker push ${IMAGE}:${TAG}"
         }
       }
