@@ -105,6 +105,31 @@ jobs:
           script: |
             echo "Début du déploiement sur $(hostname)"
             
+            # Vérifier si des services utilisent le port 80 et les arrêter
+            echo "Vérification et arrêt des services sur le port 80..."
+            
+            # Vérifier si un processus utilise le port 80
+            PORT_80_PROCESS=$(sudo lsof -i :80 -t || sudo netstat -tulpn | grep ':80 ' | awk '{print $7}' | cut -d'/' -f1 || sudo ss -tulpn | grep ':80 ' | awk '{print $7}' | cut -d',' -f2 | cut -d'=' -f2)
+            
+            if [ ! -z "$PORT_80_PROCESS" ]; then
+              echo "Processus trouvé sur le port 80: $PORT_80_PROCESS - Tentative d'arrêt des services courants..."
+              
+              # Arrêter les services web courants
+              sudo systemctl stop apache2 || true
+              sudo systemctl stop httpd || true
+              sudo systemctl stop nginx || true
+              sudo systemctl disable apache2 || true
+              sudo systemctl disable httpd || true
+              sudo systemctl disable nginx || true
+              
+              # Vérifier à nouveau si le port est libre
+              if sudo lsof -i :80 -t || sudo netstat -tulpn | grep ':80 ' || sudo ss -tulpn | grep ':80 '; then
+                echo "Le port 80 est toujours utilisé. Tentative de kill brutal des processus..."
+                sudo kill -9 $(sudo lsof -i :80 -t) || true
+                sleep 2
+              fi
+            fi
+            
             # Vérifier si Docker est installé
             if ! command -v docker &> /dev/null; then
               echo "Docker n'est pas installé, installation en cours..."
@@ -141,7 +166,7 @@ jobs:
               echo "Docker est déjà installé. Version: $(sudo docker --version)"
             fi
             
-            # Toujours utiliser sudo pour Docker, même s'il est déjà installé
+            # Toujours utiliser sudo pour Docker
             echo "Téléchargement de l'image Docker..."
             sudo docker pull flemoi/greenshop:latest
             
@@ -149,32 +174,36 @@ jobs:
             sudo docker stop greenshop_container || true
             sudo docker rm greenshop_container || true
             
-            echo "Démarrage du nouveau conteneur..."
-            sudo docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:latest
+            # Vérifier une dernière fois si le port 80 est libre
+            if sudo lsof -i :80 -t || sudo netstat -tulpn | grep ':80 ' || sudo ss -tulpn | grep ':80 '; then
+              echo "AVERTISSEMENT: Le port 80 est toujours utilisé. Tentative de démarrage du conteneur sur le port 8080..."
+              sudo docker run -d -p 8080:80 --name greenshop_container flemoi/greenshop:latest
+            else
+              echo "Démarrage du nouveau conteneur sur le port 80..."
+              sudo docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:latest
+            fi
+            
+            # Attente pour que le conteneur démarre complètement
+            sleep 3
             
             # Vérification du déploiement
             echo "Vérification que le conteneur est bien démarré..."
             if sudo docker ps | grep greenshop_container; then
               echo "✅ Conteneur démarré avec succès"
               sudo docker logs --tail 20 greenshop_container
+              
+              # Afficher l'adresse d'accès
+              IP_ADDRESS=$(hostname -I | awk '{print $1}')
+              if sudo docker port greenshop_container | grep 8080; then
+                echo "🌐 Accès à l'application: http://$IP_ADDRESS:8080"
+              else
+                echo "🌐 Accès à l'application: http://$IP_ADDRESS"
+              fi
             else
               echo "❌ ERREUR: Le conteneur n'est pas démarré!"
               sudo docker ps -a
+              sudo docker logs greenshop_container
               exit 1
             fi
             
             echo "GreenShop déployé avec succès sur $(hostname)"
-            
-            # Vérification du statut d'Apache/HTTPD (s'il est installé)
-            if command -v systemctl &> /dev/null && systemctl list-unit-files | grep -q "apache\|httpd"; then
-              echo "Vérification du statut d'Apache/HTTPD..."
-              sudo systemctl status apache2 || sudo systemctl status httpd || true
-              echo "Arrêt d'Apache/HTTPD si actif..."
-              sudo systemctl stop apache2 || sudo systemctl stop httpd || true
-              echo "Désactivation du démarrage automatique d'Apache/HTTPD..."
-              sudo systemctl disable apache2 || sudo systemctl disable httpd || true
-            fi
-            
-            # Vérification du port 80
-            echo "Vérification du port 80..."
-            sudo netstat -tuln | grep 80 || sudo ss -tuln | grep 80 || echo "Impossible de vérifier le port 80 (netstat/ss non disponible)"
