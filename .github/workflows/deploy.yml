@@ -15,12 +15,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Login to DockerHub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
@@ -31,13 +25,25 @@ jobs:
             flemoi/greenshop:${{ github.sha }}
           cache-from: type=registry,ref=flemoi/greenshop:latest
 
-  deploy:
+  # Job pour extraire les hôtes cibles du secret
+  prepare:
     needs: build
+    runs-on: ubuntu-latest
+    outputs:
+      target_hosts: ${{ steps.set-hosts.outputs.target_hosts }}
+    steps:
+      - id: set-hosts
+        run: |
+          # Convertir le secret en format utilisable pour la matrice
+          HOSTS_JSON='${{ secrets.TARGET_HOSTS }}'
+          echo "target_hosts=${HOSTS_JSON}" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: prepare
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # Définir explicitement les hôtes cibles pour éviter l'erreur fromJson
-        host: ${{ fromJSON(secrets.TARGET_HOSTS) }}
+        host: ${{ fromJSON(needs.prepare.outputs.target_hosts) }}
       fail-fast: false
     steps:
       - name: Set up SSH configuration
@@ -57,8 +63,7 @@ jobs:
             IdentityFile ~/.ssh/id_rsa
             StrictHostKeyChecking no
           
-          Host target*
-            HostName %h
+          Host *
             User ${{ secrets.TARGET_USER }}
             IdentityFile ~/.ssh/id_rsa
             ProxyJump bastion
