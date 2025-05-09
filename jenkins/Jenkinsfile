@@ -16,9 +16,6 @@ pipeline {
     }
 
     stage('Build Docker image') {
-      when {
-        changeset "**/Dockerfile", "**/files/**"
-      }
       steps {
         script {
           def commit = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
