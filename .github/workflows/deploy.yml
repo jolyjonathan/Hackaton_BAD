@@ -137,40 +137,44 @@ jobs:
               
               echo "Activation du démarrage automatique..."
               sudo systemctl enable docker || true
-              
-              # Utiliser sudo pour cette exécution
-              echo "Téléchargement de l'image Docker..."
-              sudo docker pull flemoi/greenshop:latest
-              
-              echo "Arrêt et suppression du conteneur existant..."
-              sudo docker stop greenshop_container || true
-              sudo docker rm greenshop_container || true
-              
-              echo "Démarrage du nouveau conteneur..."
-              sudo docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:latest
             else
-              echo "Docker est déjà installé. Version: $(docker --version)"
-              
-              echo "Téléchargement de l'image Docker..."
-              docker pull flemoi/greenshop:latest
-              
-              echo "Arrêt et suppression du conteneur existant..."
-              docker stop greenshop_container || true
-              docker rm greenshop_container || true
-              
-              echo "Démarrage du nouveau conteneur..."
-              docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:latest
+              echo "Docker est déjà installé. Version: $(sudo docker --version)"
             fi
+            
+            # Toujours utiliser sudo pour Docker, même s'il est déjà installé
+            echo "Téléchargement de l'image Docker..."
+            sudo docker pull flemoi/greenshop:latest
+            
+            echo "Arrêt et suppression du conteneur existant..."
+            sudo docker stop greenshop_container || true
+            sudo docker rm greenshop_container || true
+            
+            echo "Démarrage du nouveau conteneur..."
+            sudo docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:latest
             
             # Vérification du déploiement
             echo "Vérification que le conteneur est bien démarré..."
-            if docker ps | grep greenshop_container; then
+            if sudo docker ps | grep greenshop_container; then
               echo "✅ Conteneur démarré avec succès"
-              docker logs --tail 20 greenshop_container
+              sudo docker logs --tail 20 greenshop_container
             else
               echo "❌ ERREUR: Le conteneur n'est pas démarré!"
-              docker ps -a
+              sudo docker ps -a
               exit 1
             fi
             
             echo "GreenShop déployé avec succès sur $(hostname)"
+            
+            # Vérification du statut d'Apache/HTTPD (s'il est installé)
+            if command -v systemctl &> /dev/null && systemctl list-unit-files | grep -q "apache\|httpd"; then
+              echo "Vérification du statut d'Apache/HTTPD..."
+              sudo systemctl status apache2 || sudo systemctl status httpd || true
+              echo "Arrêt d'Apache/HTTPD si actif..."
+              sudo systemctl stop apache2 || sudo systemctl stop httpd || true
+              echo "Désactivation du démarrage automatique d'Apache/HTTPD..."
+              sudo systemctl disable apache2 || sudo systemctl disable httpd || true
+            fi
+            
+            # Vérification du port 80
+            echo "Vérification du port 80..."
+            sudo netstat -tuln | grep 80 || sudo ss -tuln | grep 80 || echo "Impossible de vérifier le port 80 (netstat/ss non disponible)"
