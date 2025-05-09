@@ -19,7 +19,7 @@ pipeline {
     stage('Build Docker image') {
       steps {
         script {
-          docker.build("${IMAGE}:${TAG}", "-f ${DOCKERFILE_PATH} ${BUILD_CONTEXT}")
+          sh "docker build -t ${IMAGE_TAG} -f ${DOCKERFILE_PATH} ${BUILD_CONTEXT}"
         }
       }
     }
