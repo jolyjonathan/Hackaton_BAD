@@ -36,7 +36,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        host: ${{ fromJson(secrets.TARGET_HOSTS) }}
+        # Définir explicitement les hôtes cibles pour éviter l'erreur fromJson
+        host: ${{ fromJSON(secrets.TARGET_HOSTS) }}
       fail-fast: false
     steps:
       - name: Set up SSH configuration
@@ -77,13 +78,13 @@ jobs:
               sudo service docker start
               sudo usermod -a -G docker $USER
               # Utiliser sudo pour cette exécution
-              sudo docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
               sudo docker pull flemoi/greenshop:${{ github.sha }}
               sudo docker stop greenshop_container || true
               sudo docker rm greenshop_container || true
               sudo docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:${{ github.sha }}
             else
               # Docker est déjà installé
+              docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
               docker pull flemoi/greenshop:${{ github.sha }}
               docker stop greenshop_container || true
               docker rm greenshop_container || true
@@ -101,7 +102,3 @@ jobs:
       - name: Notification de déploiement réussi
         run: |
           echo "Le déploiement de GreenShop a été réalisé avec succès sur toutes les instances cibles via le bastion."
-          echo "Instances déployées :"
-          for host in $(echo '${{ secrets.TARGET_HOSTS }}' | jq -r '.[]'); do
-            echo "- $host (IP privée, accessible via le bastion)"
-          done
