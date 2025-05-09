@@ -1,228 +1,94 @@
-name: Deploy GreenShop via Bastion (Verbose)
+name: Deploy GreenShop via Bastion
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
-env:
-  # Activer le mode debug de GitHub Actions
-  ACTIONS_RUNNER_DEBUG: true
-  ACTIONS_STEP_DEBUG: true
-
 jobs:
-  deploy-all:
+  deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Environment Information
-        run: |
-          echo "GitHub Runner OS: $(uname -a)"
-          echo "GitHub Runner Hostname: $(hostname)"
-          echo "GitHub SHA: ${{ github.sha }}"
-          echo "GitHub Ref: ${{ github.ref }}"
-          echo "GitHub Action ID: ${{ github.run_id }}"
-
-      - name: Set up SSH configuration (verbose)
-        run: |
-          echo "Setting up SSH configuration..."
-          mkdir -p ~/.ssh
-          echo "Writing private key..."
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          echo "Private key written. Fingerprint:"
-          ssh-keygen -l -f ~/.ssh/id_rsa || echo "Could not generate fingerprint"
-          
-          echo "Adding bastion host to known_hosts..."
-          # Vérifier le format de l'adresse du bastion
-          BASTION="${{ secrets.BASTION_HOST }}"
-          echo "Bastion host address format: ${BASTION}"
-          
-          # Ajouter manuellement l'entrée known_hosts pour éviter les erreurs de ssh-keyscan
-          echo "Ajout manuel de l'entrée known_hosts..."
-          echo "${BASTION} ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7OZ4/SUvVlmbGMl8CnCe8HtYyn8aNMpOI6qWOrELM8XbHehxJj4wNT3DjglD0DWtqJQLgzCuYlrH6LDGw7gBUCgQJvQu2cYTxAKiQkAaC47ZlgeTQ2zUVBQsuMNZP6F9FfU/3UVxSSpSNW3I6aWrWQKvE7wB8S3VEZHg/YsNqI4JikQTm+yqUKdGYDgEWnrZq3LlxLNMQlsbMdpCZeqh7W0ICND2eMY5U41Z1Wf9xJR6rZJFcjxDFuBnpU1Bzx8X1jM0ISB0NEwxnqw48mi7CgOvQcGNf3Ls1ZXZkgZu1VE1nNerXBYuSw/i5KlFStf3IrCCYAx4MK+nKf5iHXoGkjVe+DJsb9fzR5qoSK3QB5ZA5XCOdQa6hzx97+wHizovxeDGchJBGe+RtMIrp6kZj9RJOuFKS26C0P/Z/u13VYMhN9GiPVpZ+wQzm2XTFPwHU+VTCBcxI8RyqI/qzCH9Rma1nh/yPqCgT/RJO8QmFw9eC7xv9/dv4c2IWQjU=" >> ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
-          
-          echo "Creating SSH config file..."
-          cat > ~/.ssh/config << EOF
-          Host bastion
-            HostName ${{ secrets.BASTION_HOST }}
-            User ${{ secrets.BASTION_USER }}
-            IdentityFile ~/.ssh/id_rsa
-            StrictHostKeyChecking no
-            LogLevel DEBUG3
-          
-          Host *
-            User ${{ secrets.TARGET_USER }}
-            IdentityFile ~/.ssh/id_rsa
-            ProxyJump bastion
-            StrictHostKeyChecking no
-            LogLevel DEBUG3
-          EOF
-          
-          chmod 600 ~/.ssh/config
-          echo "SSH config file created:"
-          cat ~/.ssh/config | grep -v IdentityFile
-          
-          echo "Testing connection to bastion with StrictHostKeyChecking disabled..."
-          ssh -v -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} "echo Bastion connection successful" || echo "Échec de la connexion au bastion, mais on continue"
-          
-            - name: Create deployment script (with detailed logs)
-              run: |
-                echo "Creating deployment script..."
-                cat > deploy.sh << 'EOL'
-                #!/bin/bash
-                
-                # Activer le mode debug bash pour voir toutes les commandes exécutées
-                set -x
-                
-                # Fonction pour la journalisation
-                log() {
-                  echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
-                }
-                
-                log "Début du déploiement sur $(hostname)"
-                log "Vérification de l'installation de Docker..."
-                
-                if ! command -v docker &> /dev/null; then
-                  log "Docker n'est pas installé, installation en cours..."
-                  
-                  # Distribution check
-                  if [ -f /etc/os-release ]; then
-                    . /etc/os-release
-                    log "Distribution détectée: $NAME $VERSION_ID"
-                  fi
-                  
-                  # Installation selon la distribution
-                  if command -v amazon-linux-extras &> /dev/null; then
-                    log "Installation via amazon-linux-extras..."
-                    sudo amazon-linux-extras install docker -y
-                  elif command -v apt-get &> /dev/null; then
-                    log "Installation via apt-get..."
-                    sudo apt-get update -y
-                    sudo apt-get install -y docker.io
-                  elif command -v yum &> /dev/null; then
-                    log "Installation via yum..."
-                    sudo yum install -y docker
-                  else
-                    log "Méthode d'installation non reconnue. Tentative générique..."
-                    curl -fsSL https://get.docker.com -o get-docker.sh
-                    sudo sh get-docker.sh
-                  fi
-                  
-                  log "Démarrage du service Docker..."
-                  sudo systemctl start docker || sudo service docker start
-                  
-                  log "Activation du démarrage automatique de Docker..."
-                  sudo systemctl enable docker || true
-                  
-                  log "Ajout de l'utilisateur actuel au groupe docker..."
-                  sudo usermod -a -G docker $USER
-                  
-                  log "Utilisation de sudo pour cette exécution..."
-                  log "Téléchargement de l'image Docker..."
-                  sudo docker pull flemoi/greenshop:latest
-                  
-                  log "Arrêt du conteneur existant (s'il existe)..."
-                  sudo docker stop greenshop_container || true
-                  
-                  log "Suppression du conteneur existant (s'il existe)..."
-                  sudo docker rm greenshop_container || true
-                  
-                  log "Démarrage du nouveau conteneur..."
-                  sudo docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:latest
-                else
-                  log "Docker est déjà installé. Version:"
-                  docker --version
-                  
-                  log "Téléchargement de l'image Docker..."
-                  docker pull flemoi/greenshop:latest
-                  
-                  log "Arrêt du conteneur existant (s'il existe)..."
-                  docker stop greenshop_container || true
-                  
-                  log "Suppression du conteneur existant (s'il existe)..."
-                  docker rm greenshop_container || true
-                  
-                  log "Démarrage du nouveau conteneur..."
-                  docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:latest
-                fi
-                
-                log "Vérification que le conteneur est bien démarré..."
-                if docker ps | grep greenshop_container; then
-                  log "Conteneur démarré avec succès"
-                  docker logs greenshop_container
-                else
-                  log "ERREUR: Le conteneur n'est pas démarré!"
-                  docker ps -a
-                  exit 1
-                fi
-                
-                log "GreenShop déployé avec succès sur $(hostname)"
-                log "Ports exposés:"
-                docker port greenshop_container
-                
-                log "Informations système:"
-                df -h
-                free -m
-                exit 0
-                EOL
-                
-                chmod +x deploy.sh
-                echo "Deployment script created:"
-                cat deploy.sh
-
-      - name: Deploy to all target instances
-        run: |
-          echo "Starting deployment to all target instances..."
-          
-          # Utiliser le secret TARGET_HOSTS pour les hôtes cibles
-          # Le format attendu est une chaîne avec les hôtes séparés par des espaces
-          # Exemple: "10.0.1.10 10.0.2.20 10.0.3.30"
-          HOSTS=(${{ secrets.TARGET_HOSTS }})
-          
-          echo "Déploiement sur ${#HOSTS[@]} hôtes..."
-          
-          for host in "${HOSTS[@]}"; do
-            echo "======================================================="
-            echo "Déploiement sur $host..."
-            echo "Vérification de la connexion SSH à travers le bastion..."
+      - name: Deploy to target instances
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.TARGET_HOSTS }}
+          username: ${{ secrets.TARGET_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          proxy_host: ${{ secrets.BASTION_HOST }}
+          proxy_username: ${{ secrets.BASTION_USER }}
+          proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          proxy_port: 22
+          script: |
+            echo "Début du déploiement sur $(hostname)"
             
-            # Test de connexion
-            if ssh -o ConnectTimeout=10 -J ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} ${{ secrets.TARGET_USER }}@$host "echo Test de connexion réussi sur $host"; then
-              echo "Connexion SSH réussie. Copie du script de déploiement..."
+            # Vérifier si Docker est installé
+            if ! command -v docker &> /dev/null; then
+              echo "Docker n'est pas installé, installation en cours..."
               
-              # Copie du script avec verbose
-              scp -v -o ProxyJump=${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} deploy.sh ${{ secrets.TARGET_USER }}@$host:~/
-              
-              echo "Exécution du script de déploiement..."
-              ssh -v -J ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} ${{ secrets.TARGET_USER }}@$host "./deploy.sh"
-              
-              DEPLOY_STATUS=$?
-              if [ $DEPLOY_STATUS -eq 0 ]; then
-                echo "Déploiement réussi sur $host"
-              else
-                echo "ERREUR: Déploiement échoué sur $host avec le code $DEPLOY_STATUS"
+              # Détecter la distribution
+              if [ -f /etc/os-release ]; then
+                . /etc/os-release
+                echo "Distribution: $NAME $VERSION_ID"
               fi
+              
+              # Installation selon la distribution
+              if command -v amazon-linux-extras &> /dev/null; then
+                echo "Installation via amazon-linux-extras..."
+                sudo amazon-linux-extras install docker -y
+              elif command -v apt-get &> /dev/null; then
+                echo "Installation via apt-get..."
+                sudo apt-get update
+                sudo apt-get install -y docker.io
+              elif command -v yum &> /dev/null; then
+                echo "Installation via yum..."
+                sudo yum install -y docker
+              else
+                echo "Méthode d'installation générique..."
+                curl -fsSL https://get.docker.com -o get-docker.sh
+                sudo sh get-docker.sh
+              fi
+              
+              echo "Démarrage du service Docker..."
+              sudo systemctl start docker || sudo service docker start
+              
+              echo "Activation du démarrage automatique..."
+              sudo systemctl enable docker || true
+              
+              # Utiliser sudo pour cette exécution
+              echo "Téléchargement de l'image Docker..."
+              sudo docker pull flemoi/greenshop:latest
+              
+              echo "Arrêt et suppression du conteneur existant..."
+              sudo docker stop greenshop_container || true
+              sudo docker rm greenshop_container || true
+              
+              echo "Démarrage du nouveau conteneur..."
+              sudo docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:latest
             else
-              echo "ERREUR: Impossible de se connecter à $host via le bastion"
+              echo "Docker est déjà installé. Version: $(docker --version)"
+              
+              echo "Téléchargement de l'image Docker..."
+              docker pull flemoi/greenshop:latest
+              
+              echo "Arrêt et suppression du conteneur existant..."
+              docker stop greenshop_container || true
+              docker rm greenshop_container || true
+              
+              echo "Démarrage du nouveau conteneur..."
+              docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:latest
             fi
-            echo "======================================================="
-          done
-          
-          echo "Tous les déploiements sont terminés"
-
-      - name: Verify deployment
-        run: |
-          echo "Vérification des déploiements..."
-          
-          # Utiliser le même secret pour les vérifications
-          HOSTS=(${{ secrets.TARGET_HOSTS }})
-          
-          for host in "${HOSTS[@]}"; do
-            echo "Vérification sur $host..."
-            if ssh -J ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} ${{ secrets.TARGET_USER }}@$host "docker ps | grep greenshop_container"; then
-              echo "✅ GreenShop est actif sur $host"
+            
+            # Vérification du déploiement
+            echo "Vérification que le conteneur est bien démarré..."
+            if docker ps | grep greenshop_container; then
+              echo "✅ Conteneur démarré avec succès"
+              docker logs --tail 20 greenshop_container
             else
-              echo "❌ GreenShop n'est PAS actif sur $host"
+              echo "❌ ERREUR: Le conteneur n'est pas démarré!"
+              docker ps -a
+              exit 1
             fi
-          done
+            
+            echo "GreenShop déployé avec succès sur $(hostname)"
