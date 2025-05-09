@@ -6,45 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  deploy-all:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: |
-            flemoi/greenshop:latest
-            flemoi/greenshop:${{ github.sha }}
-          cache-from: type=registry,ref=flemoi/greenshop:latest
-
-  # Job pour extraire les hôtes cibles du secret
-  prepare:
-    needs: build
-    runs-on: ubuntu-latest
-    outputs:
-      target_hosts: ${{ steps.set-hosts.outputs.target_hosts }}
-    steps:
-      - id: set-hosts
-        run: |
-          # Convertir le secret en format utilisable pour la matrice
-          HOSTS_JSON='${{ secrets.TARGET_HOSTS }}'
-          echo "target_hosts=${HOSTS_JSON}" >> $GITHUB_OUTPUT
-
-  deploy:
-    needs: prepare
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        host: ${{ fromJSON(needs.prepare.outputs.target_hosts) }}
-      fail-fast: false
     steps:
       - name: Set up SSH configuration
         run: |
@@ -52,10 +15,8 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           
-          # Ajouter les hosts connus pour éviter les vérifications interactives
           ssh-keyscan ${{ secrets.BASTION_HOST }} >> ~/.ssh/known_hosts
           
-          # Configurer SSH pour utiliser le bastion comme proxy
           cat > ~/.ssh/config << EOF
           Host bastion
             HostName ${{ secrets.BASTION_HOST }}
@@ -72,38 +33,40 @@ jobs:
           
           chmod 600 ~/.ssh/config
 
-      - name: Deploy to target instance through bastion
+      - name: Deploy to all target instances
         run: |
-          # Exécuter la commande SSH à travers le bastion vers l'instance cible
-          ssh -J ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} ${{ secrets.TARGET_USER }}@${{ matrix.host }} << 'ENDSSH'
-            # Vérifier si Docker est installé
-            if ! command -v docker &> /dev/null; then
-              echo "Docker n'est pas installé, installation en cours..."
-              sudo amazon-linux-extras install docker -y || sudo apt-get update && sudo apt-get install -y docker.io
-              sudo service docker start
-              sudo usermod -a -G docker $USER
-              # Utiliser sudo pour cette exécution
-              sudo docker pull flemoi/greenshop:${{ github.sha }}
-              sudo docker stop greenshop_container || true
-              sudo docker rm greenshop_container || true
-              sudo docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:${{ github.sha }}
-            else
-              # Docker est déjà installé
-              docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
-              docker pull flemoi/greenshop:${{ github.sha }}
-              docker stop greenshop_container || true
-              docker rm greenshop_container || true
-              docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:${{ github.sha }}
-            fi
+          # Créer un script de déploiement
+          cat > deploy.sh << 'EOL'
+          #!/bin/bash
+          if ! command -v docker &> /dev/null; then
+            echo "Docker n'est pas installé, installation en cours..."
+            sudo amazon-linux-extras install docker -y || sudo apt-get update && sudo apt-get install -y docker.io
+            sudo service docker start
+            sudo usermod -a -G docker $USER
+            sudo systemctl enable docker
             
-            echo "GreenShop déployé avec succès sur $(hostname)"
-            docker ps | grep greenshop_container
-          ENDSSH
-
-  notify:
-    needs: deploy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Notification de déploiement réussi
-        run: |
-          echo "Le déploiement de GreenShop a été réalisé avec succès sur toutes les instances cibles via le bastion."
+            # Utiliser sudo pour cette exécution
+            sudo docker pull flemoi/greenshop:latest
+            sudo docker stop greenshop_container || true
+            sudo docker rm greenshop_container || true
+            sudo docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:latest
+          else
+            # Docker est déjà installé
+            docker pull flemoi/greenshop:latest
+            docker stop greenshop_container || true
+            docker rm greenshop_container || true
+            docker run -d -p 80:80 --name greenshop_container flemoi/greenshop:latest
+          fi
+          echo "GreenShop déployé avec succès sur $(hostname)"
+          docker ps | grep greenshop_container
+          EOL
+          
+          chmod +x deploy.sh
+          
+          # Déployer sur chaque instance
+          # Remplacer ces IP par vos vraies IP cibles ou utilisez une variable d'environnement
+          for host in "10.0.1.10" "10.0.2.20" "10.0.3.30"; do
+            echo "Déploiement sur $host..."
+            scp -o ProxyJump=${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} deploy.sh ${{ secrets.TARGET_USER }}@$host:~/
+            ssh -J ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} ${{ secrets.TARGET_USER }}@$host "./deploy.sh"
+          done
