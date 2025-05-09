@@ -1,7 +1,7 @@
 FROM php:8.0-apache
 
 # Copier le code Greenshop
-COPY roles/webapp/files/ /var/www/html/
+COPY ansible_old/roles/webapp/files/ /var/www/html/
 
 # Installer les extensions PHP nécessaires
 RUN apt-get update \
@@ -12,3 +12,5 @@ RUN apt-get update \
 # Permissions
 RUN chown -R www-data:www-data /var/www/html \
  && chmod -R 750 /var/www/html
+
+EXPOSE 80
