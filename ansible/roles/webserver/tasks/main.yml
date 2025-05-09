@@ -1,20 +1,3 @@
-- name: Synchroniser les sources du site Greenshop
-  ansible.posix.synchronize:
-    src: /var/www/greenshop/
-    dest: "{{ playbook_dir }}/../roles/webserver/files/"
-    mode: pull
-    recursive: yes
-    rsync_opts:
-      - "--archive"
-      - "--delete"
-  delegate_to: localhost
-  when: inventory_hostname == '192.168.50.82'
-  tags:
-    - sync_web
-
-
-
-
 - name: Installer Apache et PHP8 sur Amazon Linux 2
   become: yes
   shell: |
@@ -41,27 +24,50 @@
     group: apache
     mode: '0755'
 
-- name: Synchroniser les fichiers web dans /home/ec2-user/tmp_upload
-  delegate_to: localhost
-  ansible.posix.synchronize:
-    src: "{{ role_path }}/files/"
-    dest: /home/ec2-user/tmp_upload/
-    mode: push
-    recursive: yes
 
-- name: Installer dans /var/www sur la cible
-  ansible.builtin.shell: |
-    set -e
-    sudo rm -rf /var/www/greenshop
-    sudo mkdir -p /var/www/greenshop/
-    sudo mv /home/ec2-user/tmp_upload/* /var/www/greenshop/
-    sudo rmdir /home/ec2-user/tmp_upload
-    ls -l /var/www
-    args:
-      executable: /bin/bash
-    become: yes   # facultatif si sudo passwordless pour ec2-user
-    tags:
-      - webserver
+
+
+
+
+
+
+
+
+
+
+
+- name: Créer /home/ec2-user/tmp_upload sur la cible via bastion
+  delegate_to: localhost
+  args:
+    executable: /bin/bash
+  shell: |
+    ssh -i /root/.ssh/migration.pem \
+      -o 'ProxyCommand=ssh -i /root/.ssh/migration.pem ec2-user@{{ hostvars[bastion_host].ansible_host }} -W %h:%p' \
+      ec2-user@{{ ansible_host }} \
+      'mkdir -p /home/ec2-user/tmp_upload && chmod 700 /home/ec2-user/tmp_upload'
+
+- name: Copier les fichiers web via SCP+ProxyCommand
+  delegate_to: localhost
+  args:
+    executable: /bin/bash
+  shell: |
+    scp -r -P 22 \
+      -o 'ProxyCommand=ssh -i /root/.ssh/migration.pem ec2-user@{{ hostvars[bastion_host].ansible_host }} -W %h:%p' \
+      -i /root/.ssh/migration.pem \
+      {{ role_path }}/files/ \
+      ec2-user@{{ ansible_host }}:/home/ec2-user/tmp_upload/
+
+- name: Installer les fichiers dans /var/www via SSH+ProxyCommand
+  delegate_to: localhost
+  args:
+    executable: /bin/bash
+  shell: |
+    ssh -i /root/.ssh/migration.pem \
+      -o 'ProxyCommand=ssh -i /root/.ssh/migration.pem ec2-user@{{ hostvars[bastion_host].ansible_host }} -W %h:%p' \
+      ec2-user@{{ ansible_host }} \
+      'sudo mkdir -p /var/www && sudo rm -rf /var/www && sudo mv /home/ec2-user/tmp_upload/* /var/www && sudo rmdir /home/ec2-user/tmp_upload && ls /var/www'
+
+
 
 
 - name: Ajouter le VirtualHost pour greenshop
@@ -87,17 +93,22 @@
       </VirtualHost>
   notify: Reload Apache
 
-- name: Activer le site greenshop
-  ansible.builtin.command: a2ensite greenshop.conf
-  args:
-    creates: /etc/apache2/sites-enabled/greenshop.conf
+- name: Mettre à jour le DocumentRoot dans httpd.conf
+  ansible.builtin.replace:
+    path: /etc/httpd/conf/httpd.conf
+    regexp: '^DocumentRoot\s+".*"'
+    replace: 'DocumentRoot "/var/www/greenshop"'
   notify: Reload Apache
 
+- name: Adapter le bloc Directory par défaut
+  ansible.builtin.replace:
+    path: /etc/httpd/conf/httpd.conf
+    regexp: '<Directory\s+".*">.*?<\/Directory>'
+    replace: |
+      <Directory "/var/www/greenshop">
+          Options Indexes FollowSymLinks
+          AllowOverride All
+          Require all granted
+      </Directory>
+  notify: Reload Apache
 
-
-
-- name: Redémarrer Apache pour prendre en compte les changements
-  become: yes
-  service:
-    name: httpd
-    state: restarted
