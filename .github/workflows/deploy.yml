@@ -42,7 +42,8 @@ jobs:
           echo -e "\n======== TENTATIVE SSH DIRECTE ========"
           echo "Tentative de connexion SSH directe au bastion:"
           ssh -v -i ~/.ssh/id_rsa -o ConnectTimeout=10 ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} "echo Connexion SSH réussie" || echo "Connexion SSH échouée"
-   network-diagnosis:
+  
+  network-diagnosis:
     runs-on: ubuntu-latest
     steps:
       - name: Install network tools
@@ -86,7 +87,7 @@ jobs:
           
           echo "Testing SSH with 10 second timeout..."
           ssh -v -o ConnectTimeout=10 -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} "echo SSH connection successful" || echo "SSH connection failed"
-          
+
   deploy:
     runs-on: ubuntu-latest
     steps:
