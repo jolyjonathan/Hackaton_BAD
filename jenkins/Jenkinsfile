@@ -6,7 +6,7 @@ pipeline {
     TAG = 'latest'
     DOCKER_CREDS = 'dockerhub-credentials-id'
     DOCKERFILE_PATH = 'ansible_old/roles/docker/webapp/Dockerfile'
-    BUILD_CONTEXT = 'ansible_old/roles/docker/webapp'
+    BUILD_CONTEXT = '.'
   }
 
   stages {
