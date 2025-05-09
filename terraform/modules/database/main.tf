@@ -17,9 +17,9 @@ resource "aws_db_instance" "main" {
   db_name                = var.name
   username               = var.username
   password               = var.password
-  parameter_group_name   = "default.${var.engine}${var.engine_version}"
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-  vpc_security_group_ids = [var.security_group_id]
+  #parameter_group_name   = "default.${var.engine}${var.engine_version}"
+  #db_subnet_group_name   = aws_db_subnet_group.main.name
+  #vpc_security_group_ids = [var.security_group_id]
   skip_final_snapshot    = true
   multi_az               = true
   storage_encrypted      = true

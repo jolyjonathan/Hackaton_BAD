@@ -175,6 +175,7 @@ terraform output db_endpoint
 
    * Remplacez `admin` par le nom d'utilisateur configuré dans Terraform
    * Le mot de passe vous sera demandé (c'est celui défini dans la configuration Terraform)
+   * Attention ne mettez pas le port dans la commande d'import de la base de donné !
 
 ## Accès aux instances d'application
 
