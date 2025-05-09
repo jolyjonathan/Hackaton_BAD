@@ -16,19 +16,21 @@ pipeline {
     }
 
     stage('Build Docker image') {
+      when {
+        changeset "**/Dockerfile", "**/files/**"
+      }
       steps {
         script {
           def commit = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
           def dateTag = sh(script: 'date +%Y%m%d-%H%M', returnStdout: true).trim()
           def imageTag = "${IMAGE}:${dateTag}-${commit}"
           env.IMAGE_TAG = imageTag
-
-          // Build avec tag versionné + latest
+    
           sh "docker build -t ${imageTag} -t ${IMAGE}:${TAG} -f ${DOCKERFILE_PATH} ."
         }
       }
     }
-
+    
     stage('Push to DockerHub') {
       steps {
         withCredentials([usernamePassword(
