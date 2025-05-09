@@ -65,7 +65,7 @@
     ssh -i /root/.ssh/migration.pem \
       -o 'ProxyCommand=ssh -i /root/.ssh/migration.pem ec2-user@{{ hostvars[bastion_host].ansible_host }} -W %h:%p' \
       ec2-user@{{ ansible_host }} \
-      'sudo mkdir -p /var/www && sudo rm -rf /var/www && sudo mv /home/ec2-user/tmp_upload/* /var/www && sudo rmdir /home/ec2-user/tmp_upload && ls /var/www'
+      'sudo rm -rf /var/www && sudo mkdir -p /var/www/greenshop && sudo mv /home/ec2-user/tmp_upload/* /var/www/greenshop && sudo rmdir /home/ec2-user/tmp_upload && ls /var/www'
 
 
 

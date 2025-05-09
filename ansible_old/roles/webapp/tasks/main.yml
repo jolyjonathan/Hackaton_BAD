@@ -1,8 +1,0 @@
-- name: Synchroniser les sources du site Greenshop
-  synchronize:
-    src: /var/www/greenshop/
-    dest: "{{ playbook_dir }}/roles/webapp/files"
-    recursive: yes
-  delegate_to: localhost
-  tags:
-    - sync_web
