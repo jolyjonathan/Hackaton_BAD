@@ -11,7 +11,7 @@ pipeline {
   stages {
     stage('Clone ansible branch') {
       steps {
-        git branch: 'ansible', url: 'https://github.com/jolyjonathan/Hackaton_BAD.git'
+        git branch: 'main', url: 'https://github.com/jolyjonathan/Hackaton_BAD.git'
       }
     }
 
