@@ -1,0 +1,49 @@
+---
+- name: Copy and import MySQL dump on bastion host
+  hosts: bastion
+  remote_user: ec2-user
+  become: false
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    rds_host: greenshop-db.clys2k04251l.us-east-1.rds.amazonaws.com
+    rds_db: greenshop
+    rds_user: admin
+    rds_password: YOUR_PASSWORD
+  collections:
+    - community.mysql
+
+  tasks:
+    - name: Ensure Python3 and pip3 are installed
+      become: true
+      yum:
+        name:
+          - python3
+          - python3-pip
+        state: present
+
+    - name: Install PyMySQL for MySQL modules
+      become: true
+      pip:
+        name: PyMySQL
+        executable: pip3
+
+    - name: Copy database dump to bastion
+      copy:
+        src: "{{ playbook_dir }}/../roles/dbserver/files/db_dump.sql"
+        dest: /home/ec2-user/db_dump.sql
+        mode: '0644'
+
+    - name: Remove the first line from the SQL dump
+      shell: sed -i '1d' /home/ec2-user/db_dump.sql
+      args:
+        executable: /bin/bash
+
+    - name: Import SQL dump into RDS instance
+      community.mysql.mysql_db:
+        login_host: "{{ rds_host }}"
+        login_user: "{{ rds_user }}"
+        login_password: "{{ rds_password }}"
+        name: "{{ rds_db }}"
+        state: import
+        target: /home/ec2-user/db_dump.sql
+

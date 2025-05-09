@@ -1,0 +1,64 @@
+---
+# playbooks/sync_and_dump.yml
+
+- name: Synchroniser les sources du site Greenshop
+  hosts: target
+  gather_facts: no
+  vars:
+    web_sync_dest: "{{ playbook_dir }}/../roles/webserver/files/"
+  tasks:
+    - name: Synchroniser les sources du site Greenshop
+      ansible.posix.synchronize:
+        src: /var/www/greenshop/
+        dest: "{{ web_sync_dest }}"
+        mode: pull
+        recursive: yes
+        rsync_opts:
+          - "--archive"
+          - "--delete"
+      delegate_to: localhost
+      tags:
+        - sync_web
+
+- name: Générer et récupérer le dump de la base MariaDB
+  hosts: target
+  gather_facts: no
+  become: yes
+  vars:
+    local_dump_dir: "{{ playbook_dir }}/../roles/dbserver/files"
+  tasks:
+    - name: Générer le dump de la base MariaDB
+      ansible.builtin.shell: >
+        mysqldump -u {{ db_user }} -p'{{ db_pass }}' {{ db_name }} > /tmp/db_dump.sql
+      tags:
+        - dump_db
+
+    - name: Créer le répertoire local de destination pour le dump
+      ansible.builtin.file:
+        path: "{{ local_dump_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
+      tags:
+        - dump_db
+
+    - name: Récupérer le dump MariaDB vers la machine de contrôle
+      ansible.posix.synchronize:
+        src: /tmp/db_dump.sql
+        dest: "{{ local_dump_dir }}/db_dump.sql"
+        mode: pull
+        rsync_opts:
+          - "--archive"
+          - "--delete"
+      delegate_to: localhost
+      tags:
+        - dump_db
+
+    - name: Supprimer le dump temporaire sur le serveur distant
+      ansible.builtin.file:
+        path: /tmp/db_dump.sql
+        state: absent
+      tags:
+        - dump_db
+

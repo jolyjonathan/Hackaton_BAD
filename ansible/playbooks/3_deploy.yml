@@ -1,0 +1,7 @@
+---
+# deploy.yml
+- name: Déploiement du site Greenshop
+  hosts: web
+  become: yes
+  roles:
+    - webserver

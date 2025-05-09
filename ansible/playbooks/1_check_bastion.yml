@@ -1,0 +1,20 @@
+---
+# playbooks/check_bastion.yml
+- name: Vérifier la connexion SSH au bastion AWS
+  hosts: bastion
+  gather_facts: false
+  connection: ssh
+  tasks:
+
+    - name: Vérifier que le port SSH est ouvert sur le bastion
+      ansible.builtin.wait_for:
+        host: "{{ inventory_hostname }}"
+        port: 22
+        timeout: 10
+      tags:
+        - bastion_check
+
+    - name: Tester la connectivité Ansible (ping module)
+      ansible.builtin.ping:
+      tags:
+        - bastion_check

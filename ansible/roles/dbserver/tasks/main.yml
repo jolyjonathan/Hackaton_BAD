@@ -1,0 +1,43 @@
+---
+# roles/dbserver/tasks/main.yml
+
+- name: Générer le dump de la base MariaDB sur 192.168.50.82
+  ansible.builtin.shell: >
+    mysqldump -u {{ db_user }} -p'{{ db_pass }}' {{ db_name }} > /tmp/db_dump.sql
+  become: yes
+  when: inventory_hostname == '192.168.50.82'
+  tags:
+    - dump_db
+
+- name: Créer le répertoire local de destination pour le dump
+  ansible.builtin.file:
+    path: "{{ playbook_dir }}/../roles/dbserver/files"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+  tags:
+    - dump_db
+
+- name: Récupérer le dump MariaDB vers le serveur Ansible
+  ansible.posix.synchronize:
+    src: /tmp/db_dump.sql
+    dest: "{{ playbook_dir }}/../roles/dbserver/files/db_dump.sql"
+    mode: pull
+    rsync_opts:
+      - "--archive"
+      - "--delete"
+  delegate_to: localhost
+  when: inventory_hostname == '192.168.50.82'
+  tags:
+    - dump_db
+
+- name: Supprimer le dump temporaire sur le serveur distant
+  ansible.builtin.file:
+    path: /tmp/db_dump.sql
+    state: absent
+  become: yes
+  when: inventory_hostname == '192.168.50.82'
+  tags:
+    - dump_db
+

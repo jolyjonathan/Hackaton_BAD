@@ -1,0 +1,114 @@
+- name: Installer Apache et PHP8 sur Amazon Linux 2
+  become: yes
+  shell: |
+    amazon-linux-extras enable php8.0
+    yum clean metadata
+    amazon-linux-extras install -y php8.0
+    yum install -y httpd php-mysqlnd php-zip
+  args:
+    creates: /usr/bin/php
+
+- name: Démarrer et activer le service Apache
+  become: yes
+  service:
+    name: httpd
+    state: started
+    enabled: yes
+
+- name: Créer le répertoire de l'application
+  become: yes
+  file:
+    path: /var/www/greenshop
+    state: directory
+    owner: apache
+    group: apache
+    mode: '0755'
+
+
+
+
+
+
+
+
+
+
+
+
+
+- name: Créer /home/ec2-user/tmp_upload sur la cible via bastion
+  delegate_to: localhost
+  args:
+    executable: /bin/bash
+  shell: |
+    ssh -i /root/.ssh/migration.pem \
+      -o 'ProxyCommand=ssh -i /root/.ssh/migration.pem ec2-user@{{ hostvars[bastion_host].ansible_host }} -W %h:%p' \
+      ec2-user@{{ ansible_host }} \
+      'mkdir -p /home/ec2-user/tmp_upload && chmod 700 /home/ec2-user/tmp_upload'
+
+- name: Copier les fichiers web via SCP+ProxyCommand
+  delegate_to: localhost
+  args:
+    executable: /bin/bash
+  shell: |
+    scp -r -P 22 \
+      -o 'ProxyCommand=ssh -i /root/.ssh/migration.pem ec2-user@{{ hostvars[bastion_host].ansible_host }} -W %h:%p' \
+      -i /root/.ssh/migration.pem \
+      {{ role_path }}/files/ \
+      ec2-user@{{ ansible_host }}:/home/ec2-user/tmp_upload/
+
+- name: Installer les fichiers dans /var/www via SSH+ProxyCommand
+  delegate_to: localhost
+  args:
+    executable: /bin/bash
+  shell: |
+    ssh -i /root/.ssh/migration.pem \
+      -o 'ProxyCommand=ssh -i /root/.ssh/migration.pem ec2-user@{{ hostvars[bastion_host].ansible_host }} -W %h:%p' \
+      ec2-user@{{ ansible_host }} \
+      'sudo rm -rf /var/www && sudo mkdir -p /var/www/greenshop && sudo mv /home/ec2-user/tmp_upload/* /var/www/greenshop && sudo rmdir /home/ec2-user/tmp_upload && ls /var/www'
+
+
+
+
+- name: Ajouter le VirtualHost pour greenshop
+  ansible.builtin.blockinfile:
+    path: /etc/apache2/sites-available/greenshop.conf
+    create: yes
+    block: |
+      <VirtualHost *:80>
+          ServerName greenshop.local
+          ServerAlias greenshop.com greenshop.fr
+          ServerAdmin webmaster@localhost
+
+          DocumentRoot /var/www/greenshop
+
+          <Directory /var/www/greenshop>
+              Options Indexes FollowSymLinks
+              AllowOverride All
+              Require all granted
+          </Directory>
+
+          ErrorLog ${APACHE_LOG_DIR}/greenshop_error.log
+          CustomLog ${APACHE_LOG_DIR}/greenshop_access.log combined
+      </VirtualHost>
+  notify: Reload Apache
+
+- name: Mettre à jour le DocumentRoot dans httpd.conf
+  ansible.builtin.replace:
+    path: /etc/httpd/conf/httpd.conf
+    regexp: '^DocumentRoot\s+".*"'
+    replace: 'DocumentRoot "/var/www/greenshop"'
+  notify: Reload Apache
+
+- name: Adapter le bloc Directory par défaut
+  ansible.builtin.replace:
+    path: /etc/httpd/conf/httpd.conf
+    regexp: '<Directory\s+".*">.*?<\/Directory>'
+    replace: |
+      <Directory "/var/www/greenshop">
+          Options Indexes FollowSymLinks
+          AllowOverride All
+          Require all granted
+      </Directory>
+  notify: Reload Apache
+
