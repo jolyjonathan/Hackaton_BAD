@@ -1,6 +1,6 @@
 FROM php:8.0-apache
 
-# Copier le code Greenshop.
+# Copier le code Greenshop
 COPY ansible/roles/webapp/files/ /var/www/html/
 
 # Installer les extensions PHP nécessaires
