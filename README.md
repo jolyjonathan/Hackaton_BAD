@@ -2,7 +2,13 @@
 
 Ce projet représente la migration complète de l'application GreenShop, un e-commerçant spécialisé dans les produits bio, depuis une infrastructure on-premise vers le cloud AWS. Il implémente une approche DevOps moderne avec Infrastructure as Code (IaC), conteneurisation et CI/CD pour répondre aux besoins de croissance et d'agilité de GreenShop.
 
-# Lien du projet
+# Lien du projet et Participants
+
+Participants :
+ - Jonathan JOLY
+ - Kevin ABRIBAT
+ - Flavien LEMOINE
+ - Julien HERMELIN
 
 https://github.com/jolyjonathan/Hackaton_BAD
 
