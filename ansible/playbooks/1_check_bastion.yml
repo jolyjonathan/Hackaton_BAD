@@ -1,20 +1,34 @@
 ---
-# playbooks/check_bastion.yml
+# playbooks/1_check_bastion.yml
 - name: Vérifier la connexion SSH au bastion AWS
   hosts: bastion
   gather_facts: false
-  connection: ssh
+  become: true
   tasks:
 
-    - name: Vérifier que le port SSH est ouvert sur le bastion
-      ansible.builtin.wait_for:
-        host: "{{ inventory_hostname }}"
-        port: 22
-        timeout: 10
-      tags:
-        - bastion_check
+    - name: Assurer que le répertoire .ssh existe pour ec2-user
+      ansible.builtin.file:
+        path: /home/ec2-user/.ssh
+        state: directory
+        owner: ec2-user
+        group: ec2-user
+        mode: '0700'
 
-    - name: Tester la connectivité Ansible (ping module)
+    - name: Copier migration.pem vers le bastion
+      ansible.builtin.copy:
+        src: /root/.ssh/migration.pem
+        dest: /home/ec2-user/.ssh/migration.pem
+        owner: ec2-user
+        group: ec2-user
+        mode: '0400'
+
+    - name: Vérifier que le port SSH est ouvert (depuis le poste de contrôle)
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: 22
+        timeout: 15
+      delegate_to: localhost
+      run_once: true
+
+    - name: Ping Ansible
       ansible.builtin.ping:
-      tags:
-        - bastion_check

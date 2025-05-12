@@ -1,0 +1,22 @@
+---
+# playbooks/4_check_web_http.yml
+- name: Vérifier le service HTTP local sur les serveurs web
+  hosts: web
+  gather_facts: false
+  tasks:
+
+    - name: Exécuter un curl vers localhost:80
+      shell: curl -s -o /dev/null -w "%{http_code}" http://localhost:80
+      register: http_code
+      changed_when: false
+
+    - name: Afficher le code HTTP obtenu
+      debug:
+        msg: "Serveur {{ inventory_hostname }} renvoie le code HTTP {{ http_code.stdout }}"
+
+    - name: S'assurer que le code HTTP est 200
+      assert:
+        that:
+          - http_code.stdout == '200'
+        fail_msg: "Serveur {{ inventory_hostname }} renvoie {{ http_code.stdout }} au lieu de 200"
+        success_msg: "Serveur {{ inventory_hostname }} OK (200)"
